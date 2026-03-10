@@ -1,0 +1,171 @@
+#!/usr/bin/env node
+/**
+ * Generates 5 quiz questions per concept from concepts data.
+ * Run: node scripts/generateConceptQuizzes.mjs
+ */
+import { readFileSync, writeFileSync } from "fs";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const conceptsPath = join(__dirname, "../data/concepts.ts");
+const outputPath = join(__dirname, "../data/conceptQuizzes.ts");
+
+const content = readFileSync(conceptsPath, "utf8");
+
+// Extract concepts via regex (id, title, explanation, whyItMattersForPM, exampleUseCase)
+const conceptBlocks = content.matchAll(
+  /\{\s*id:\s*(\d+),\s*title:\s*"([^"]+)",\s*explanation:\s*"((?:[^"\\]|\\.)*)",\s*whyItMattersForPM:\s*"((?:[^"\\]|\\.)*)",\s*exampleUseCase:\s*"((?:[^"\\]|\\.)*)"/gs
+);
+
+const concepts = [];
+for (const m of conceptBlocks) {
+  concepts.push({
+    id: parseInt(m[1], 10),
+    title: m[2],
+    explanation: m[3].replace(/\\"/g, '"'),
+    whyItMattersForPM: m[4].replace(/\\"/g, '"'),
+    exampleUseCase: m[5].replace(/\\"/g, '"'),
+  });
+}
+
+// Generic wrong answers for different question types
+const WRONG_GENERIC = [
+  "A rule-based system with no machine learning",
+  "A database optimization technique",
+  "A UI design pattern",
+  "A caching strategy",
+  "A type of neural network for image recognition only",
+  "A protocol for API communication",
+  "A security encryption method",
+  "A deployment pipeline tool",
+  "A monitoring dashboard",
+  "A data visualization technique",
+];
+
+function pickWrongOptions(correct, allConcepts, currentId, count = 3) {
+  const used = new Set([correct]);
+  const wrong = [];
+  // Try to get from other concepts
+  for (const c of allConcepts) {
+    if (c.id === currentId) continue;
+    const opts = [
+      c.explanation.split(". ")[0],
+      c.whyItMattersForPM.split(". ")[0],
+      c.exampleUseCase,
+    ].filter((o) => o && o.length > 10 && !used.has(o));
+    for (const o of opts) {
+      if (wrong.length >= count) break;
+      if (!used.has(o)) {
+        used.add(o);
+        wrong.push(o);
+      }
+    }
+  }
+  // Fill with generic if needed
+  for (const g of WRONG_GENERIC) {
+    if (wrong.length >= count) break;
+    if (!used.has(g)) {
+      used.add(g);
+      wrong.push(g);
+    }
+  }
+  return wrong.slice(0, count);
+}
+
+function shuffle(arr) {
+  const out = [...arr];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+const quizzes = [];
+for (const c of concepts) {
+  const expSentences = c.explanation.split(". ").filter((s) => s.length > 20);
+  const whySentences = c.whyItMattersForPM.split(". ").filter((s) => s.length > 20);
+
+  const q1Correct = expSentences[0] || c.explanation.slice(0, 200);
+  const q1Wrong = pickWrongOptions(q1Correct, concepts, c.id);
+  const q1Options = shuffle([q1Correct, ...q1Wrong]);
+  const q1CorrectIndex = q1Options.indexOf(q1Correct);
+
+  const q2Correct = expSentences[1] || expSentences[0] || c.explanation.slice(0, 200);
+  const q2Wrong = pickWrongOptions(q2Correct, concepts, c.id);
+  const q2Options = shuffle([q2Correct, ...q2Wrong]);
+  const q2CorrectIndex = q2Options.indexOf(q2Correct);
+
+  const q3Correct = whySentences[0] || c.whyItMattersForPM.slice(0, 200);
+  const q3Wrong = pickWrongOptions(q3Correct, concepts, c.id);
+  const q3Options = shuffle([q3Correct, ...q3Wrong]);
+  const q3CorrectIndex = q3Options.indexOf(q3Correct);
+
+  const q4Correct = c.exampleUseCase;
+  const q4Wrong = concepts
+    .filter((x) => x.id !== c.id)
+    .map((x) => x.exampleUseCase)
+    .filter((o) => o !== q4Correct && o.length > 15);
+  const q4Options = shuffle([q4Correct, ...q4Wrong.slice(0, 3)]);
+  const q4CorrectIndex = q4Options.indexOf(q4Correct);
+
+  const q5Correct = expSentences[2] || expSentences[1] || c.explanation.split(".").slice(-2)[0]?.trim() || q1Correct;
+  const q5Wrong = pickWrongOptions(q5Correct, concepts, c.id);
+  const q5Options = shuffle([q5Correct, ...q5Wrong]);
+  const q5CorrectIndex = q5Options.indexOf(q5Correct);
+
+  const questions = [
+    {
+      question: `What best describes ${c.title}?`,
+      options: q1Options,
+      correctIndex: q1CorrectIndex >= 0 ? q1CorrectIndex : 0,
+    },
+    {
+      question: `Which is true about ${c.title}?`,
+      options: q2Options,
+      correctIndex: q2CorrectIndex >= 0 ? q2CorrectIndex : 0,
+    },
+    {
+      question: `Why does ${c.title} matter for PMs?`,
+      options: q3Options,
+      correctIndex: q3CorrectIndex >= 0 ? q3CorrectIndex : 0,
+    },
+    {
+      question: `Which is an example of ${c.title}?`,
+      options: q4Options,
+      correctIndex: q4CorrectIndex >= 0 ? q4CorrectIndex : 0,
+    },
+    {
+      question: `What else is important to know about ${c.title}?`,
+      options: q5Options,
+      correctIndex: q5CorrectIndex >= 0 ? q5CorrectIndex : 0,
+    },
+  ];
+
+  quizzes.push({ conceptId: c.id, questions });
+}
+
+const out = `/**
+ * Concept quiz questions. Generated by scripts/generateConceptQuizzes.mjs
+ */
+
+export type QuizQuestion = {
+  question: string;
+  options: string[];
+  correctIndex: number;
+};
+
+export const conceptQuizzes: Record<number, QuizQuestion[]> = ${JSON.stringify(
+  Object.fromEntries(quizzes.map((q) => [q.conceptId, q.questions])),
+  null,
+  2
+).replace(/"([^"]+)":/g, "$1:")};
+
+export function getConceptQuiz(conceptId: number): QuizQuestion[] | undefined {
+  return conceptQuizzes[conceptId];
+}
+`;
+
+writeFileSync(outputPath, out);
+console.log(`Generated ${quizzes.length} concept quizzes to data/conceptQuizzes.ts`);

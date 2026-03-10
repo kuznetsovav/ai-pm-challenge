@@ -1,0 +1,44 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model ChallengeDay {
+  id                   Int     @id @default(autoincrement())
+  dayNumber            Int     @unique
+  concept              String
+  interviewQuestion    String?
+  prototypeName        String?
+  prototypeDescription String?
+}
+
+model Progress {
+  id                 Int     @id @default(autoincrement())
+  dayNumber          Int     @unique
+  conceptCompleted   Boolean @default(false)
+  interviewCompleted Boolean @default(false)
+  prototypeCompleted Boolean @default(false)
+}
+
+model ChallengeSettings {
+  id        Int      @id @default(autoincrement())
+  startedAt DateTime
+}
+
+model Prototype {
+  id           Int     @id @default(autoincrement())
+  name         String
+  description  String
+  problem      String
+  coreConcepts String
+  cursorPrompt String?
+  startDay     Int
+  endDay       Int
+  githubUrl    String?
+}
