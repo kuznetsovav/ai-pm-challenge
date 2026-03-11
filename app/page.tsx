@@ -1,11 +1,15 @@
 import { prisma } from "@/lib/prisma";
 import { getChallengeSettings } from "@/lib/challengeSettings";
 import { concepts } from "@/data/concepts";
+import { getServerSession } from "next-auth";
+import { redirect } from "next/navigation";
+import { authOptions } from "./api/auth/[...nextauth]/route";
 import { TaskChecklist } from "./components/TaskChecklist";
 import { ProgressGrid, type DayProgress } from "./components/ProgressGrid";
 import { StartChallengeButton } from "./components/StartChallengeButton";
 import { ConceptCard } from "./components/ConceptCard";
 import { ConceptQuiz } from "./components/ConceptQuiz";
+import { LogoutButton } from "./components/LogoutButton";
 import { getConceptQuiz } from "@/data/conceptQuizzes";
 
 const TOTAL_DAYS = 60;
@@ -50,14 +54,15 @@ function computeCurrentDayFromStart(startedAt: Date): number {
   return Math.min(TOTAL_DAYS, Math.max(1, diffDays + 1));
 }
 
-async function getCurrentDayData() {
+async function getCurrentDayData(userId: string) {
   const [settings, latestProgress, allProgress] = await Promise.all([
     getChallengeSettings(),
     prisma.progress.findFirst({
+      where: { userId },
       orderBy: { dayNumber: "desc" },
     }),
     prisma.progress.findMany({
-      where: { dayNumber: { gte: 1, lte: TOTAL_DAYS } },
+      where: { userId, dayNumber: { gte: 1, lte: TOTAL_DAYS } },
     }),
   ]);
 
@@ -72,7 +77,7 @@ async function getCurrentDayData() {
       where: { dayNumber: currentDayNumber },
     }),
     prisma.progress.findUnique({
-      where: { dayNumber: currentDayNumber },
+      where: { userId_dayNumber: { userId, dayNumber: currentDayNumber } },
     }),
   ]);
 
@@ -113,19 +118,56 @@ async function getCurrentDayData() {
 }
 
 export default async function Home() {
-  const { currentDayNumber, challengeDay, progress, days, currentStreak, longestStreak, startedAt } =
-    await getCurrentDayData();
+  // #region agent log
+  fetch("http://127.0.0.1:7587/ingest/c83a4d83-b27b-4c02-9ad9-47d9c17d498d", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Debug-Session-Id": "f3487b",
+    },
+    body: JSON.stringify({
+      sessionId: "f3487b",
+      runId: "pre-fix",
+      hypothesisId: "H1",
+      location: "app/page.tsx:Home",
+      message: "Home page render invoked",
+      data: {},
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion agent log
+
+  const session = await getServerSession(authOptions);
+
+  if (!session || !session.user || !session.user.id) {
+    redirect("/login");
+  }
+
+  const userId = session.user.id as string;
+
+  const {
+    currentDayNumber,
+    challengeDay,
+    progress,
+    days,
+    currentStreak,
+    longestStreak,
+    startedAt,
+  } = await getCurrentDayData(userId);
 
   if (!startedAt) {
     return (
       <main className="flex flex-col gap-8">
-        <header className="pb-6">
-          <h1 className="text-2xl font-semibold tracking-tight">
-            AI PM Challenge
-          </h1>
-          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            60 days of AI product management concepts, interview prep, and prototypes
-          </p>
+        <header className="pb-6 flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">
+              AI PM Challenge
+            </h1>
+            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+              60 days of AI product management concepts, interview prep, and prototypes
+            </p>
+          </div>
+          <LogoutButton />
         </header>
         <section className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-8 shadow-sm flex flex-col items-center gap-6 text-center">
           <p className="text-zinc-600 dark:text-zinc-400 max-w-md">
@@ -164,16 +206,19 @@ export default async function Home() {
 
   return (
     <main className="flex flex-col gap-8">
-      <header className="pb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          AI PM Challenge
-        </h1>
-        <p className="mt-1 text-sm font-medium text-zinc-600 dark:text-zinc-400">
-          Day {currentDayNumber} / {TOTAL_DAYS}
-        </p>
-        <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-500">
-          Started {startedAt.toLocaleDateString(undefined, { dateStyle: "medium" })}
-        </p>
+      <header className="pb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            AI PM Challenge
+          </h1>
+          <p className="mt-1 text-sm font-medium text-zinc-600 dark:text-zinc-400">
+            Day {currentDayNumber} / {TOTAL_DAYS}
+          </p>
+          <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-500">
+            Started {startedAt.toLocaleDateString(undefined, { dateStyle: "medium" })}
+          </p>
+        </div>
+        <LogoutButton />
       </header>
 
       <section className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-sm flex flex-wrap gap-6">

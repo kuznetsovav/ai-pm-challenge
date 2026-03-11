@@ -1,11 +1,14 @@
 import { prisma } from "@/lib/prisma";
 import { prototypes as prototypesDataset } from "@/data/prototypes";
+import { getServerSession } from "next-auth";
+import { redirect } from "next/navigation";
+import { authOptions } from "../api/auth/[...nextauth]/route";
 import { PrototypeCard } from "../components/PrototypeCard";
 
 export const dynamic = "force-dynamic";
 
-async function getPrototypeData() {
-  const [challengeDaysWithPrototype, prototypes] = await Promise.all([
+async function getPrototypeData(userId: string) {
+  const [challengeDaysWithPrototype, prototypes, progress] = await Promise.all([
     prisma.challengeDay.findMany({
       where: {
         OR: [
@@ -16,10 +19,17 @@ async function getPrototypeData() {
       orderBy: { dayNumber: "asc" },
     }),
     prisma.prototype.findMany(),
+    prisma.progress.findMany({
+      where: { userId },
+    }),
   ]);
 
   const prototypeByStartDay = new Map(
     prototypes.map((p) => [p.startDay, p])
+  );
+
+  const progressByDay = new Map(
+    progress.map((p) => [p.dayNumber, p])
   );
 
   return challengeDaysWithPrototype.map((day, index) => {
@@ -31,6 +41,9 @@ async function getPrototypeData() {
     const coreConcepts = Array.isArray(dataset?.coreConcepts)
       ? dataset.coreConcepts.join(", ")
       : (dataset?.coreConcepts ?? "");
+    const prototypeProgress = progressByDay.get(startDay);
+    const isDone = !!prototypeProgress?.prototypeCompleted;
+
     return {
       prototypeId: saved?.id ?? null,
       name: day.prototypeName ?? "Prototype",
@@ -40,12 +53,21 @@ async function getPrototypeData() {
       startDay,
       endDay,
       githubUrl: saved?.githubUrl ?? null,
+      isDone,
     };
   });
 }
 
 export default async function PrototypesPage() {
-  const prototypes = await getPrototypeData();
+  const session = await getServerSession(authOptions);
+
+  if (!session || !session.user || !session.user.id) {
+    redirect("/login");
+  }
+
+  const userId = session.user.id as string;
+
+  const prototypes = await getPrototypeData(userId);
 
   return (
     <main className="flex flex-col gap-8">
@@ -70,6 +92,7 @@ export default async function PrototypesPage() {
             startDay={p.startDay}
             endDay={p.endDay}
             githubUrl={p.githubUrl}
+            isDone={p.isDone}
           />
         ))}
       </div>

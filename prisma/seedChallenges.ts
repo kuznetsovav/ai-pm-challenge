@@ -1,11 +1,8 @@
-import path from "node:path";
 import { PrismaClient } from "@prisma/client";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { challengeDays } from "../scripts/generateChallenges";
 
-const dbPath = path.join(process.cwd(), "dev.db");
-const adapter = new PrismaBetterSqlite3({ url: `file:${dbPath}` });
-const prisma = new PrismaClient({ adapter });
+// Uses DATABASE_URL from .env (e.g. file:./prisma/dev.db)
+const prisma = new PrismaClient();
 
 async function main() {
   await prisma.challengeDay.deleteMany({});

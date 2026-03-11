@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
 import { prisma } from "@/lib/prisma";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
 const PROGRESS_FIELDS = [
   "conceptCompleted",
@@ -15,6 +17,13 @@ function isProgressField(s: unknown): s is ProgressField {
 
 export async function POST(request: Request) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session || !session.user || !session.user.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const userId = session.user.id as string;
+
     const body = await request.json();
     const { dayNumber, field, value } = body;
 
@@ -41,8 +50,9 @@ export async function POST(request: Request) {
     }
 
     const progress = await prisma.progress.upsert({
-      where: { dayNumber },
+      where: { userId_dayNumber: { userId, dayNumber } },
       create: {
+        userId,
         dayNumber,
         conceptCompleted: false,
         interviewCompleted: false,

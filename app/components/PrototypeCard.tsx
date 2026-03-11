@@ -12,6 +12,7 @@ interface PrototypeCardProps {
   startDay: number;
   endDay: number;
   githubUrl: string | null;
+  isDone: boolean;
 }
 
 export function PrototypeCard({
@@ -23,6 +24,7 @@ export function PrototypeCard({
   startDay,
   endDay,
   githubUrl: initialUrl,
+  isDone,
 }: PrototypeCardProps) {
   const router = useRouter();
   const [url, setUrl] = useState(initialUrl ?? "");
@@ -123,13 +125,24 @@ export function PrototypeCard({
   return (
     <>
       <article className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-sm flex flex-col gap-4">
-        <div>
-          <h2 className="font-semibold text-zinc-900 dark:text-zinc-100">
-            {name}
-          </h2>
-          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            Days {startDay} – {endDay}
-          </p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="font-semibold text-zinc-900 dark:text-zinc-100">
+              {name}
+            </h2>
+            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+              Days {startDay} – {endDay}
+            </p>
+          </div>
+          <span
+            className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium border whitespace-nowrap ${
+              isDone
+                ? "border-emerald-400/60 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300"
+                : "border-zinc-300/70 bg-zinc-50 dark:bg-zinc-900 text-zinc-600 dark:text-zinc-300"
+            }`}
+          >
+            {isDone ? "Done" : "To Do"}
+          </span>
         </div>
         {description && (
           <p className="text-sm text-zinc-600 dark:text-zinc-400">

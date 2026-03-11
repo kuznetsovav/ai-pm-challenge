@@ -25,7 +25,7 @@ export function StartChallengeButton() {
       type="button"
       onClick={handleStart}
       disabled={starting}
-      className="w-full rounded-xl bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 py-4 px-6 text-lg font-semibold hover:bg-zinc-800 dark:hover:bg-zinc-200 disabled:opacity-50 transition-colors"
+      className="inline-flex items-center justify-center rounded-xl bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 px-6 py-3 text-sm font-semibold hover:bg-zinc-800 dark:hover:bg-zinc-200 disabled:opacity-50 transition-colors"
     >
       {starting ? "Starting…" : "Start the Challenge"}
     </button>
