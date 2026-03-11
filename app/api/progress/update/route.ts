@@ -18,7 +18,9 @@ function isProgressField(s: unknown): s is ProgressField {
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions);
-    const userId = (session?.user as { id?: string } | undefined)?.id;
+    const user = session?.user as { id?: string } | null;
+    const userId = user?.id;
+
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
