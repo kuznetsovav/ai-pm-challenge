@@ -6,13 +6,14 @@ import { prisma } from "@/lib/prisma";
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
+  secret: process.env.NEXTAUTH_SECRET,
   session: {
     strategy: "database",
   },
   callbacks: {
     async session({ session, user }) {
       if (session.user) {
-        (session.user as { id?: string }).id = user.id;
+        session.user.id = user.id;
       }
       return session;
     },
