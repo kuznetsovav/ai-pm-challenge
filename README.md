@@ -62,7 +62,7 @@ This rhythm keeps users learning, thinking, and building in parallel.
 
 ---
 
-## Examples of Prototypes
+## Examples of Prototype
 
 Throughout the challenge, users are guided to build concrete AI-powered product ideas such as:
 
