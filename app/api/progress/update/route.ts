@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 const VISITOR_COOKIE = "challenge_visitor_id";
@@ -15,7 +15,7 @@ function isProgressField(s: unknown): s is ProgressField {
   return typeof s === "string" && PROGRESS_FIELDS.includes(s as ProgressField);
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const visitorId = request.cookies.get(VISITOR_COOKIE)?.value;
     if (!visitorId) {
