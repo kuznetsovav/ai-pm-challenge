@@ -1,6 +1,5 @@
 import cron from "node-cron";
 import { prisma } from "../lib/prisma";
-import { sendChallengeReminderEmail } from "../lib/email";
 
 const TOTAL_DAYS = 60;
 
@@ -14,7 +13,7 @@ function computeCurrentDayFromStart(startedAt: Date): number {
   return Math.min(TOTAL_DAYS, Math.max(1, diffDays + 1));
 }
 
-async function checkAndSendReminders() {
+async function checkProgress() {
   try {
     const settings = await prisma.challengeSettings.findFirst();
     if (!settings) {
@@ -24,58 +23,24 @@ async function checkAndSendReminders() {
 
     const currentDayNumber = computeCurrentDayFromStart(settings.startedAt);
 
-    // Load all users and their progress for today
-    const users = await prisma.user.findMany({
-      where: { email: { not: null } },
-      include: {
-        progress: {
-          where: { dayNumber: currentDayNumber },
-        },
-      },
+    const completedCount = await prisma.progress.count({
+      where: { dayNumber: currentDayNumber, conceptCompleted: true },
     });
 
-    const usersNeedingReminder = users.filter((user) => {
-      const todayProgress = user.progress[0];
-      // Incomplete if no record or concept not completed
-      if (!todayProgress) return true;
-      return !todayProgress.conceptCompleted;
+    const totalVisitors = await prisma.progress.groupBy({
+      by: ["visitorId"],
     });
-
-    if (!usersNeedingReminder.length) {
-      console.log(
-        `[checkChallenges] No reminders to send for day ${currentDayNumber}.`
-      );
-      return;
-    }
 
     console.log(
-      `[checkChallenges] Sending reminders for day ${currentDayNumber} to ${usersNeedingReminder.length} user(s).`
+      `[checkChallenges] Day ${currentDayNumber}: ${completedCount}/${totalVisitors.length} visitors completed today's concept.`
     );
-
-    for (const user of usersNeedingReminder) {
-      if (!user.email) continue;
-      try {
-        await sendChallengeReminderEmail(user.email, currentDayNumber);
-        console.log(
-          `[checkChallenges] Sent reminder to ${user.email} for day ${currentDayNumber}.`
-        );
-      } catch (err) {
-        console.error(
-          `[checkChallenges] Failed to send reminder to ${user.email}:`,
-          err
-        );
-      }
-    }
   } catch (err) {
     console.error("[checkChallenges] Error while checking challenges:", err);
   }
 }
 
-// Schedule: 0 20 * * *  (every day at 20:00)
 cron.schedule("0 20 * * *", () => {
-  void checkAndSendReminders();
+  void checkProgress();
 });
 
-// Optional: run immediately when this script is started
-void checkAndSendReminders();
-
+void checkProgress();
