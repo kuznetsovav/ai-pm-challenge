@@ -1,16 +1,15 @@
+import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { getChallengeSettings } from "@/lib/challengeSettings";
 import { concepts } from "@/data/concepts";
-import { getServerSession } from "next-auth";
-import { redirect } from "next/navigation";
-import { authOptions } from "./api/auth/[...nextauth]/route";
 import { TaskChecklist } from "./components/TaskChecklist";
 import { ProgressGrid, type DayProgress } from "./components/ProgressGrid";
 import { StartChallengeButton } from "./components/StartChallengeButton";
 import { ConceptCard } from "./components/ConceptCard";
 import { ConceptQuiz } from "./components/ConceptQuiz";
-import { LogoutButton } from "./components/LogoutButton";
 import { getConceptQuiz } from "@/data/conceptQuizzes";
+
+const VISITOR_COOKIE = "challenge_visitor_id";
 
 const TOTAL_DAYS = 60;
 
@@ -54,15 +53,15 @@ function computeCurrentDayFromStart(startedAt: Date): number {
   return Math.min(TOTAL_DAYS, Math.max(1, diffDays + 1));
 }
 
-async function getCurrentDayData(userId: string) {
+async function getCurrentDayData(visitorId: string) {
   const [settings, latestProgress, allProgress] = await Promise.all([
     getChallengeSettings(),
     prisma.progress.findFirst({
-      where: { userId },
+      where: { visitorId },
       orderBy: { dayNumber: "desc" },
     }),
     prisma.progress.findMany({
-      where: { userId, dayNumber: { gte: 1, lte: TOTAL_DAYS } },
+      where: { visitorId, dayNumber: { gte: 1, lte: TOTAL_DAYS } },
     }),
   ]);
 
@@ -77,7 +76,7 @@ async function getCurrentDayData(userId: string) {
       where: { dayNumber: currentDayNumber },
     }),
     prisma.progress.findUnique({
-      where: { userId_dayNumber: { userId, dayNumber: currentDayNumber } },
+      where: { visitorId_dayNumber: { visitorId, dayNumber: currentDayNumber } },
     }),
   ]);
 
@@ -118,42 +117,66 @@ async function getCurrentDayData(userId: string) {
 }
 
 export default async function Home() {
-  // #region agent log
-  fetch("http://127.0.0.1:7587/ingest/c83a4d83-b27b-4c02-9ad9-47d9c17d498d", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Debug-Session-Id": "f3487b",
-    },
-    body: JSON.stringify({
-      sessionId: "f3487b",
-      runId: "pre-fix",
-      hypothesisId: "H1",
-      location: "app/page.tsx:Home",
-      message: "Home page render invoked",
-      data: {},
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion agent log
-
-  const session = await getServerSession(authOptions);
-
-  if (!session || !session.user || !session.user.id) {
-    redirect("/login");
+  const cookieStore = await cookies();
+  const visitorId = cookieStore.get(VISITOR_COOKIE)?.value;
+  if (!visitorId) {
+    return (
+      <main className="flex flex-col gap-8">
+        <p className="text-zinc-600 dark:text-zinc-400">
+          Loading…
+        </p>
+      </main>
+    );
   }
 
-  const userId = session.user.id as string;
+  let currentDayNumber: number;
+  let challengeDay: Awaited<ReturnType<typeof getCurrentDayData>>["challengeDay"];
+  let progress: Awaited<ReturnType<typeof getCurrentDayData>>["progress"];
+  let days: Awaited<ReturnType<typeof getCurrentDayData>>["days"];
+  let currentStreak: number;
+  let longestStreak: number;
+  let startedAt: Date | null;
 
-  const {
-    currentDayNumber,
-    challengeDay,
-    progress,
-    days,
-    currentStreak,
-    longestStreak,
-    startedAt,
-  } = await getCurrentDayData(userId);
+  try {
+    const data = await getCurrentDayData(visitorId);
+    currentDayNumber = data.currentDayNumber;
+    challengeDay = data.challengeDay;
+    progress = data.progress;
+    days = data.days;
+    currentStreak = data.currentStreak;
+    longestStreak = data.longestStreak;
+    startedAt = data.startedAt;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const isDbUnreachable =
+      err instanceof Error &&
+      (err.name === "PrismaClientInitializationError" ||
+        msg.includes("Can't reach database") ||
+        msg.includes("invalid connection"));
+
+    if (isDbUnreachable) {
+      return (
+        <main className="flex flex-col gap-8">
+          <header className="pb-6">
+            <h1 className="text-2xl font-semibold tracking-tight">
+              AI PM Challenge
+            </h1>
+          </header>
+          <section className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-6 text-amber-800 dark:text-amber-200">
+            <p className="font-medium">Database not available</p>
+            <p className="mt-2 text-sm">
+              Set <code className="rounded bg-amber-100 dark:bg-amber-900/50 px-1">DATABASE_URL</code> in{" "}
+              <code className="rounded bg-amber-100 dark:bg-amber-900/50 px-1">.env</code> to a
+              PostgreSQL connection string. For local dev, run Postgres (e.g. on port 5432) or use a
+              free hosted DB (Vercel Postgres, Neon, Supabase). Then run{" "}
+              <code className="rounded bg-amber-100 dark:bg-amber-900/50 px-1">npx prisma db push</code>.
+            </p>
+          </section>
+        </main>
+      );
+    }
+    throw err;
+  }
 
   if (!startedAt) {
     return (
@@ -167,7 +190,6 @@ export default async function Home() {
               60 days of AI product management concepts, interview prep, and prototypes
             </p>
           </div>
-          <LogoutButton />
         </header>
         <section className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-8 shadow-sm flex flex-col items-center gap-6 text-center">
           <p className="text-zinc-600 dark:text-zinc-400 max-w-md">
@@ -218,7 +240,6 @@ export default async function Home() {
             Started {startedAt.toLocaleDateString(undefined, { dateStyle: "medium" })}
           </p>
         </div>
-        <LogoutButton />
       </header>
 
       <section className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-sm flex flex-wrap gap-6">

@@ -1,13 +1,13 @@
+import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { prototypes as prototypesDataset } from "@/data/prototypes";
-import { getServerSession } from "next-auth";
-import { redirect } from "next/navigation";
-import { authOptions } from "../api/auth/[...nextauth]/route";
 import { PrototypeCard } from "../components/PrototypeCard";
+
+const VISITOR_COOKIE = "challenge_visitor_id";
 
 export const dynamic = "force-dynamic";
 
-async function getPrototypeData(userId: string) {
+async function getPrototypeData(visitorId: string) {
   const [challengeDaysWithPrototype, prototypes, progress] = await Promise.all([
     prisma.challengeDay.findMany({
       where: {
@@ -20,7 +20,7 @@ async function getPrototypeData(userId: string) {
     }),
     prisma.prototype.findMany(),
     prisma.progress.findMany({
-      where: { userId },
+      where: { visitorId },
     }),
   ]);
 
@@ -59,15 +59,17 @@ async function getPrototypeData(userId: string) {
 }
 
 export default async function PrototypesPage() {
-  const session = await getServerSession(authOptions);
-
-  if (!session || !session.user || !session.user.id) {
-    redirect("/login");
+  const cookieStore = await cookies();
+  const visitorId = cookieStore.get(VISITOR_COOKIE)?.value;
+  if (!visitorId) {
+    return (
+      <main className="flex flex-col gap-8">
+        <p className="text-zinc-600 dark:text-zinc-400">Loading…</p>
+      </main>
+    );
   }
 
-  const userId = session.user.id as string;
-
-  const prototypes = await getPrototypeData(userId);
+  const prototypes = await getPrototypeData(visitorId);
 
   return (
     <main className="flex flex-col gap-8">

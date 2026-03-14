@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
 import { prisma } from "@/lib/prisma";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+
+const VISITOR_COOKIE = "challenge_visitor_id";
 
 const PROGRESS_FIELDS = [
   "conceptCompleted",
@@ -17,11 +17,8 @@ function isProgressField(s: unknown): s is ProgressField {
 
 export async function POST(request: Request) {
   try {
-    const session = await getServerSession(authOptions);
-    const user = session?.user as { id?: string } | null;
-    const userId = user?.id;
-
-    if (!userId) {
+    const visitorId = request.cookies.get(VISITOR_COOKIE)?.value;
+    if (!visitorId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -51,9 +48,9 @@ export async function POST(request: Request) {
     }
 
     const progress = await prisma.progress.upsert({
-      where: { userId_dayNumber: { userId, dayNumber } },
+      where: { visitorId_dayNumber: { visitorId, dayNumber } },
       create: {
-        userId,
+        visitorId,
         dayNumber,
         conceptCompleted: false,
         interviewCompleted: false,
